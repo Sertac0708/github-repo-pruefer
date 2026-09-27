@@ -307,8 +307,23 @@ SICHERHEITS_ISSUE = re.compile(r"secur|token|leak|secret|sandbox|permission|inje
 BEISPIEL_DOMAIN = re.compile(r"(^|\.)(example|acme|test|invalid|local|localhost|your-[\w-]+|a|b|other)\.[a-z.]+$|"
                              r"\.(test|example|invalid|local|localhost)$|example\.|^your-")
 BILD_BASE64 = ("iVBORw0KGgo", "/9j/", "R0lGOD", "UklGR", "PHN2Zy")   # PNG, JPEG, GIF, WEBP, SVG
-LOKALER_HOST = re.compile(r"@(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\]|host\.docker\.internal|"
-                         r"(db|postgres|mysql|redis|mongo|database|rabbitmq)(:\d+)?(/|$))", re.I)
+LOKALE_HOSTS = {"localhost", "127.0.0.1", "0.0.0.0", "::1", "host.docker.internal",
+                "db", "postgres", "mysql", "redis", "mongo", "database", "rabbitmq"}
+
+
+def nur_lokale_hosts(url: str) -> bool:
+    """True nur, wenn ALLE Hosts der Zugangs-URL lokal sind (localhost/Docker-Dienstname).
+    Der Host wird exakt aus der Autoritaet gelesen — ein spaeteres "@localhost" im Pfad oder
+    in Parametern und gemischte Mehrfach-Hosts (lokal + echt) zaehlen NICHT als lokal."""
+    m = re.match(r"^[a-z][a-z0-9+.-]*://[^@/?#\s]*@([^/?#\s]+)", url, re.I)
+    if not m:
+        return False
+    hosts = [h.strip() for h in m.group(1).split(",") if h.strip()]
+    def ohne_port(h: str) -> str:
+        if h.startswith("["):                      # [::1]:5432
+            return h[1:h.find("]")] if "]" in h else h
+        return h.rsplit(":", 1)[0] if h.count(":") == 1 else h
+    return bool(hosts) and all(ohne_port(h).lower() in LOKALE_HOSTS for h in hosts)
 LANGES_BASE64 = re.compile(r"[A-Za-z0-9+/]{300,}={0,2}")
 URL_RE = re.compile(r"https?://([A-Za-z0-9.-]+\.[A-Za-z]{2,}|localhost)(:\d+)?[^\s'\"<>)\]}`]*")
 PLATZHALTER = ("your", "xxx", "example", "placeholder", "changeme", "<", "${", "{{",
@@ -627,7 +642,7 @@ def scan(wurzel: Path, unterpfad: str | None) -> dict:
                     filter_ = PLATZHALTER if generisch else ("xxxx", "your", "example", "<", "...", "…")
                     if any(p in wert.lower() for p in filter_) or len(set(wert)) < 6:
                         continue
-                    if titel.startswith("Datenbank") and LOKALER_HOST.search(wert):
+                    if titel.startswith("Datenbank") and nur_lokale_hosts(wert):
                         # Entwicklungs-DB auf localhost/Docker: Beispielwert, kein echter Zugang
                         stufe, titel = "info", "Lokaler Datenbank-Zugang (Entwicklung)"
                     b.add(kat, stufe, titel, f"{rel}:{nr}", f"{T('Wert maskiert', 'value masked')}: {maskiere(wert)}")
