@@ -1,0 +1,6 @@
+# Private Projekt-Steckbriefe gehören nie ins Repo
+projekte.md
+__pycache__/
+*.pyc
+.DS_Store
+*.zip
