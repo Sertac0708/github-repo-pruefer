@@ -1,5 +1,6 @@
-# Private Projekt-Steckbriefe gehören nie ins Repo
+# Private Projekt-Steckbriefe gehören nie ins Repo / private project profiles never go into the repo
 projekte.md
+projects.md
 __pycache__/
 *.pyc
 .DS_Store

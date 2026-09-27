@@ -1,0 +1,18 @@
+{
+  "name": "sertac-skills",
+  "owner": {
+    "name": "Sertac",
+    "url": "https://github.com/Sertac0708"
+  },
+  "metadata": {
+    "description": "Claude Code plugins by Sertac: security review of third-party repos before you install them."
+  },
+  "plugins": [
+    {
+      "name": "repo-pruefer",
+      "source": "./",
+      "description": "Security review of third-party repos, plugins, skills and MCP servers before installing them, with a three-level verdict and clean extraction of individual parts. German and English.",
+      "version": "1.1.0"
+    }
+  ]
+}

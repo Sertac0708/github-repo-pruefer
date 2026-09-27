@@ -1,0 +1,23 @@
+{
+  "name": "repo-pruefer",
+  "version": "1.1.0",
+  "description": "Reviews third-party GitHub repos, plugins, skills and MCP servers for security before you install them (hooks, data outflow, permissions, supply chain, secrets, malware, hidden AI instructions), gives a plain-language three-level verdict, checks the fit with your own projects and extracts individual parts cleanly. German and English. Claude Code only. Made by NetBoosting (https://netboosting.de).",
+  "author": {
+    "name": "Sertac",
+    "url": "https://github.com/Sertac0708"
+  },
+  "homepage": "https://github.com/Sertac0708/github-repo-pruefer",
+  "repository": "https://github.com/Sertac0708/github-repo-pruefer",
+  "license": "MIT",
+  "keywords": [
+    "security",
+    "supply-chain",
+    "code-review",
+    "github",
+    "plugins",
+    "skills",
+    "mcp",
+    "malware",
+    "prompt-injection"
+  ]
+}
