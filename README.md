@@ -159,6 +159,10 @@ skills/repo-pruefer/
     └── de/  pruefablauf · berichtsvorlage · extrahieren · projekte.vorlage
 ```
 
+## Privacy
+
+The plugin collects no data and has no telemetry — see [PRIVACY.md](PRIVACY.md) for exactly which public services it contacts and why.
+
 ## License
 
 MIT — see [LICENSE](LICENSE). Created by Sertac, 2026.

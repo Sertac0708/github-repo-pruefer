@@ -132,6 +132,10 @@ Die Antworten auf die eigenen 7 Fragen:
    ist aber keine Garantie gegen gut versteckten Schadcode. Abhängigkeiten (node_modules,
    pip-Pakete) werden nicht rekursiv durchleuchtet.
 
+## Datenschutz
+
+Das Plugin erhebt keine Daten und hat keine Telemetrie. Welche öffentlichen Dienste es genau kontaktiert und warum, steht in [PRIVACY.md](PRIVACY.md#datenschutzerklärung--repo-prüfer).
+
 ## Lizenz
 
 MIT, siehe [LICENSE](LICENSE). Erstellt von Sertac, 2026.

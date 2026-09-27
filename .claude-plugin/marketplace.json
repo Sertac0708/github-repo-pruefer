@@ -12,7 +12,7 @@
       "name": "repo-pruefer",
       "source": "./",
       "description": "Security review of third-party repos, plugins, skills and MCP servers before installing them, with a three-level verdict and clean extraction of individual parts. German and English.",
-      "version": "1.1.2"
+      "version": "1.1.3"
     }
   ]
 }
