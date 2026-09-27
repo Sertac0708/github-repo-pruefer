@@ -139,7 +139,7 @@ REGELN: list[tuple[str, str, str, re.Pattern, str]] = [
 
     # --- 4 Lieferkette ------------------------------------------------------
     ("lieferkette", "hoch", "Skript aus dem Netz direkt ausgeführt (curl | sh)",
-     re.compile(r"(curl|wget)[^\n|]*\|\s*(sudo\s+)?(ba|z)?sh\b|iwr[^\n|]*\|\s*iex|"
+     re.compile(r"(curl|wget)[^\n|]*\|\s*(sudo\s+)?(\w+=\S*\s+)*(ba|z)?sh\b|iwr[^\n|]*\|\s*iex|"
                 r"Invoke-WebRequest[^\n|]*\|\s*Invoke-Expression|irm[^\n|]*\|\s*iex", I), "alle"),
     ("lieferkette", "mittel", "Unversionierter Paketaufruf (@latest / npx -y ohne Version)",
      re.compile(r"(npx|bunx|pnpx|pnpm\s+dlx|yarn\s+dlx)\s+(-y\s+|--yes\s+)?[@\w./-]+@latest|"
@@ -211,6 +211,7 @@ SICHERHEITS_ISSUE = re.compile(r"secur|token|leak|secret|sandbox|permission|inje
                               r"malware|backdoor|telemetr|tracking|privacy|data loss|rm -rf|credential", I)
 BEISPIEL_DOMAIN = re.compile(r"(^|\.)(example|acme|test|invalid|local|localhost|your-[\w-]+|a|b|other)\.[a-z.]+$|"
                              r"\.(test|example|invalid|local|localhost)$|example\.|^your-")
+BILD_BASE64 = ("iVBORw0KGgo", "/9j/", "R0lGOD", "UklGR", "PHN2Zy")   # PNG, JPEG, GIF, WEBP, SVG
 LANGES_BASE64 = re.compile(r"[A-Za-z0-9+/]{300,}={0,2}")
 URL_RE = re.compile(r"https?://([A-Za-z0-9.-]+\.[A-Za-z]{2,}|localhost)(:\d+)?[^\s'\"<>)\]}`]*")
 PLATZHALTER = ("your", "xxx", "example", "placeholder", "changeme", "<", "${", "{{",
@@ -426,7 +427,7 @@ def scan(wurzel: Path, unterpfad: str | None) -> dict:
     inventar: dict = {
         "dateien": 0, "bytes": 0, "endungen": Counter(), "skills": [], "agenten": [],
         "befehle": [], "plugins": [], "marktplaetze": [], "hooks": [], "mcp": [],
-        "claude_settings": [], "package_json": [], "npx_pakete": set(), "grosse_dateien": [],
+        "claude_settings": [], "package_json": [], "npx_pakete": set(), "uvx_pakete": set(), "grosse_dateien": [],
         "binaer": [], "archive": [], "env_dateien": [], "domains_code": Counter(),
         "domains_doku": Counter(), "lizenzdatei": None, "workflows": [], "readme": None,
     }
@@ -531,7 +532,9 @@ def scan(wurzel: Path, unterpfad: str | None) -> dict:
                     b.add(kat, stufe, titel, f"{rel}:{nr}", kuerze(zeile))
                 if titel.startswith("npx/uvx"):
                     paket = m.group(3)
-                    if paket and not paket.startswith("-") and paket not in {"skills", "create"}:
+                    if paket and m.group(1) == "uvx" and not paket.startswith("-"):
+                        inventar["uvx_pakete"].add(re.sub(r"[@=<>].*$", "", paket))
+                    elif paket and not paket.startswith("-") and paket not in {"skills", "create"}:
                         inventar["npx_pakete"].add(re.sub(r"@[\w.^~-]*$", "", paket) if not paket.startswith("@")
                                                    else re.sub(r"(?<=.)@[\w.^~-]*$", "", paket))
             if UNSICHTBAR_HOCH.search(zeile):
@@ -539,10 +542,11 @@ def scan(wurzel: Path, unterpfad: str | None) -> dict:
                       f"{rel}:{nr}", "Text wird anders angezeigt, als er gelesen wird")
             elif bereich == "code" and UNSICHTBAR_MITTEL.search(zeile):
                 b.add("ki-anweisungen", "mittel", "Unsichtbare Zeichen im Code", f"{rel}:{nr}", kuerze(repr(zeile), 120))
-            if bereich == "code" and ext not in {".svg", ".css", ".map"} and "data:" not in zeile \
-                    and LANGES_BASE64.search(zeile):
+            b64 = LANGES_BASE64.search(zeile) if bereich == "code" and ext not in {".svg", ".css", ".map"} \
+                and "data:" not in zeile else None
+            if b64 and not b64.group(0).startswith(BILD_BASE64):
                 b.add("schadcode", "mittel", "Lange Base64-Folge im Code", f"{rel}:{nr}",
-                      f"{len(LANGES_BASE64.search(zeile).group(0))} Zeichen")
+                      f"{len(b64.group(0))} Zeichen")
             for um in URL_RE.finditer(zeile):
                 dom = um.group(1).lower()
                 if dom in HARMLOSE_DOMAINS or BEISPIEL_DOMAIN.search(dom):
@@ -550,6 +554,7 @@ def scan(wurzel: Path, unterpfad: str | None) -> dict:
                 (inventar["domains_code"] if bereich == "code" else inventar["domains_doku"])[dom] += 1
 
     inventar["npx_pakete"] = sorted(inventar["npx_pakete"])
+    inventar["uvx_pakete"] = sorted(inventar["uvx_pakete"])
     return {"befunde": b, "inventar": inventar, "basis": str(basis)}
 
 
@@ -684,6 +689,23 @@ def npm_check(pakete: list[str]) -> list[str]:
     return zeilen
 
 
+def pypi_check(pakete: list[str]) -> list[str]:
+    """uvx/pipx-Pakete kommen von PyPI, nicht von npm — nur lesend abfragen."""
+    zeilen = []
+    for p in pakete[:10]:
+        try:
+            with urllib.request.urlopen(f"https://pypi.org/pypi/{p}/json", timeout=15) as r:
+                d = json.loads(r.read().decode())
+        except Exception:  # noqa: BLE001
+            zeilen.append(f"- `{p}` (PyPI): nicht gefunden — Tippfehler-/Namensklau-Gefahr prüfen")
+            continue
+        info, rel = d.get("info", {}), d.get("releases", {})
+        up = (rel.get(info.get("version")) or [{}])[0].get("upload_time", "")[:10]
+        quelle = (info.get("project_urls") or {}).get("Source") or info.get("home_page") or "—"
+        zeilen.append(f"- `{p}` (PyPI) v{info.get('version')} vom {up} · {len(rel)} Releases · Quelle {quelle}")
+    return zeilen
+
+
 # ---------------------------------------------------------------------------
 # Vorläufige Einstufung
 # ---------------------------------------------------------------------------
@@ -810,7 +832,7 @@ def bericht(meta: dict, erg: dict, commit: str | None, klon: str, npm: list[str]
         L.append("**Nur in Doku:** " + ", ".join(f"`{d}`" for d, _ in inv["domains_doku"].most_common(25)))
     L.append("")
     if npm:
-        L.append("## npm-Pakete, die per npx/uvx gestartet werden")
+        L.append("## Pakete, die per npx (npm) / uvx (PyPI) gestartet werden")
         L += npm
         L.append("")
     L.append("## Befunde nach Prüffragen")
@@ -872,6 +894,8 @@ def main() -> None:
         if pj["name"] and not pj["privat"] and pj["datei"].count("/") == 0:
             pakete.insert(0, pj["name"])
     npm = [] if a.ohne_npm or not pakete else npm_check(list(dict.fromkeys(pakete)))
+    if not a.ohne_npm and erg["inventar"]["uvx_pakete"]:
+        npm += pypi_check(erg["inventar"]["uvx_pakete"])
     print(bericht(meta, erg, commit, str(wurzel), npm))
 
     if a.json:

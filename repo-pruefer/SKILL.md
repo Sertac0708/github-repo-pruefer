@@ -4,7 +4,7 @@ description: Prüft fremde GitHub-Repos, Plugins, Skills, MCP-Server und npm-Pak
 license: MIT
 metadata:
   author: Sertac
-  version: "1.0.0"
+  version: "1.0.1"
   created: "2026-09-27"
 ---
 
