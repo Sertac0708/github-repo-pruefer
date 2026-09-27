@@ -337,10 +337,22 @@ LIFECYCLE_MITTEL = {"prepare", "prepublish", "prepack", "postpack"}
 # ---------------------------------------------------------------------------
 # Hilfsfunktionen
 # ---------------------------------------------------------------------------
+# Nur diese Umgebungsvariablen bekommen git/npm mit — keine Tokens oder Schlüssel.
+# Only these environment variables are passed to git/npm — no tokens or keys.
+BASIS_ENV = ("PATH", "HOME", "USER", "LOGNAME", "SHELL", "TMPDIR", "LANG", "LC_ALL", "LC_CTYPE",
+             "SSL_CERT_FILE", "SSL_CERT_DIR", "HTTPS_PROXY", "HTTP_PROXY", "NO_PROXY",
+             "https_proxy", "http_proxy", "no_proxy")
+# gh darf zusätzlich seine eigene GitHub-Anmeldung sehen (Token geht nur an GitHub selbst).
+# gh may additionally see its own GitHub login (the token only goes to GitHub itself).
+GH_ENV = ("GH_TOKEN", "GITHUB_TOKEN", "GH_HOST", "GH_CONFIG_DIR", "XDG_CONFIG_HOME")
+
+
 def sh(cmd: list[str], timeout: int = 60, env: dict | None = None) -> tuple[int, str, str]:
+    erlaubt = BASIS_ENV + (GH_ENV if cmd and cmd[0] == "gh" else ())
+    umgebung = {k: v for k, v in os.environ.items() if k in erlaubt}
     try:
         p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout,
-                           env={**os.environ, **(env or {})})
+                           env={**umgebung, **(env or {})})
         return p.returncode, p.stdout, p.stderr
     except FileNotFoundError:
         return 127, "", T(f"{cmd[0]} nicht gefunden", f"{cmd[0]} not found")

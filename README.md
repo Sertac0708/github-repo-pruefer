@@ -22,7 +22,7 @@ It answers in your language (German and English built in).
 |---|---|---|
 | 1 | **What starts automatically?** | Claude hooks, `postinstall` scripts, LaunchAgents, cron, background processes |
 | 2 | **What leaves the machine?** | telemetry (PostHog, Sentry …), hosted MCP servers, Discord/Telegram webhooks, hard-coded IPs |
-| 3 | **What permissions does it take?** | auto-approvals like `Bash(*)`, writes to `~/.claude.json`, shell profiles, access to `~/.ssh`, keychain, browser data |
+| 3 | **What permissions does it take?** | auto-approvals like `Bash(*)`, writes to Claude's own config files, shell profiles, access to `~/.ssh`, keychain, browser data |
 | 4 | **Supply chain** | `npx …@latest`, `curl \| bash`, unpinned dependencies, single-maintainer npm packages, npm vs. PyPI mix-ups |
 | 5 | **Secrets** | plain-text API keys (shown masked only) |
 | 6 | **Does it do what it promises?** | spot checks: README promises vs. actual code |
@@ -134,8 +134,8 @@ Its answers to its own 7 questions:
 
 1. **Nothing starts automatically.** No hooks, no MCP server, no install script, no background service.
 2. **Network:** only `api.github.com` (metadata), `github.com` (cloning), `registry.npmjs.org`,
-   `api.npmjs.org` and `pypi.org` (read-only package lookups). No telemetry, no server of the author.
-3. **Permissions:** no auto-approvals; never writes to `~/.claude.json` or `settings.json`.
+   `api.npmjs.org` and `pypi.org` (read-only package lookups). No telemetry, no server of the author. If you are logged in with the GitHub CLI `gh`, its own GitHub login is used for the GitHub lookups — that token only goes to GitHub itself. `git` and `npm` get a minimal environment without any tokens.
+3. **Permissions:** no auto-approvals; never writes to Claude's config or settings files.
    Clones go into a temporary folder.
 4. **Supply chain:** Python standard library only, zero dependencies.
 5. **Secrets:** none.

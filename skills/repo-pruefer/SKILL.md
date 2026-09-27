@@ -6,7 +6,7 @@ license: MIT
 metadata:
   author: Sertac
   publisher: NetBoosting (https://netboosting.de)
-  version: "1.1.1"
+  version: "1.1.2"
   created: "2026-09-27"
 ---
 

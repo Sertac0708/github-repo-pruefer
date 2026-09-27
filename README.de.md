@@ -22,7 +22,7 @@ Er antwortet in deiner Sprache (Deutsch und Englisch eingebaut).
 |---|---|---|
 | 1 | **Was startet automatisch?** | Claude-Hooks, `postinstall`-Skripte, LaunchAgents, Cron, Hintergrundprozesse |
 | 2 | **Was verlässt den Rechner?** | Telemetrie (PostHog, Sentry …), gehostete MCP-Server, Discord-/Telegram-Webhooks, fest eingetragene IPs |
-| 3 | **Welche Rechte nimmt es sich?** | Auto-Freigaben wie `Bash(*)`, Schreiben in `~/.claude.json`, Shell-Profile, Zugriff auf `~/.ssh`, Schlüsselbund, Browserdaten |
+| 3 | **Welche Rechte nimmt es sich?** | Auto-Freigaben wie `Bash(*)`, Schreiben in Claudes eigene Konfigurationsdateien, Shell-Profile, Zugriff auf `~/.ssh`, Schlüsselbund, Browserdaten |
 | 4 | **Lieferkette** | `npx …@latest`, `curl \| bash`, Abhängigkeiten ohne Version, npm-Pakete mit nur einem Maintainer, npm/PyPI-Verwechslungen |
 | 5 | **Secrets** | API-Schlüssel im Klartext (werden nur maskiert angezeigt) |
 | 6 | **Tut es, was es verspricht?** | Stichproben: README-Versprechen gegen echten Code |
@@ -121,8 +121,8 @@ Die Antworten auf die eigenen 7 Fragen:
 
 1. **Nichts startet automatisch.** Es gibt keine Hooks, keinen MCP-Server, kein Installationsskript und keinen Hintergrunddienst.
 2. **Netz:** Kontakt nur zu `api.github.com` (Metadaten), `github.com` (Klonen) sowie `registry.npmjs.org`,
-   `api.npmjs.org` und `pypi.org` (nur lesende Paketabfragen). Keine Telemetrie, kein Server des Autors.
-3. **Rechte:** Es gibt keine Auto-Freigaben. Das Plugin schreibt nie in `~/.claude.json` oder `settings.json`.
+   `api.npmjs.org` und `pypi.org` (nur lesende Paketabfragen). Keine Telemetrie, kein Server des Autors. Wenn du mit der GitHub-CLI `gh` angemeldet bist, nutzt das Skript deren GitHub-Anmeldung für die GitHub-Abfragen; dieses Token geht nur an GitHub selbst. `git` und `npm` bekommen eine abgespeckte Umgebung ohne Tokens.
+3. **Rechte:** Es gibt keine Auto-Freigaben. Das Plugin schreibt nie in Claudes Konfigurations- oder Einstellungsdateien.
    Geklont wird in einen temporären Ordner.
 4. **Lieferkette:** nur die Python-Standardbibliothek, keine Abhängigkeiten.
 5. **Secrets:** keine.
