@@ -136,6 +136,14 @@ Die Antworten auf die eigenen 7 Fragen:
 
 Das Plugin erhebt keine Daten und hat keine Telemetrie. Welche öffentlichen Dienste es genau kontaktiert und warum, steht in [PRIVACY.md](PRIVACY.md#datenschutzerklärung--repo-prüfer).
 
+## Prüfung als Dienstleistung
+
+Wenn du ein Plugin, einen Skill oder einen MCP-Server einsetzen willst und niemand den Code
+vorher liest, prüft die NetBoosting GmbH ihn für dich: dieselben sieben Fragen wie dieses
+Plugin, von Hand nachgeprüft, mit schriftlichem Ergebnis und Empfehlung. Schreib an
+<hello@netboosting.de>, nenn das Repo und wofür du es einsetzen willst, und du bekommst ein
+Angebot zum Festpreis.
+
 ## Lizenz
 
 MIT, siehe [LICENSE](LICENSE). Erstellt von Sertac, 2026.

@@ -163,6 +163,13 @@ skills/repo-pruefer/
 
 The plugin collects no data and has no telemetry — see [PRIVACY.md](PRIVACY.md) for exactly which public services it contacts and why.
 
+## Review as a service
+
+If you want to use a plugin, a skill or an MCP server and nobody reads the code first,
+NetBoosting GmbH reviews it for you: the same seven questions as this plugin, checked by
+hand, with a written result and a recommendation. Write to <hello@netboosting.de>, name the
+repo and what you want to use it for, and you get a fixed-price quote.
+
 ## License
 
 MIT — see [LICENSE](LICENSE). Created by Sertac, 2026.
