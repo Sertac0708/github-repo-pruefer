@@ -28,10 +28,12 @@ Usage (English):
 from __future__ import annotations
 
 import argparse
+import http.client
 import json
 import os
 import re
 import shutil
+import socket
 import subprocess
 import sys
 import tempfile
@@ -238,9 +240,9 @@ REGELN: list[tuple[str, str, str, re.Pattern, str]] = [
                 r"Invoke-WebRequest[^\n|]*\|\s*Invoke-Expression|irm[^\n|]*\|\s*iex", I), "alle"),
     ("lieferkette", "mittel", "Unversionierter Paketaufruf (@latest / npx -y ohne Version)",
      re.compile(r"(npx|bunx|pnpx|pnpm\s+dlx|yarn\s+dlx)\s+(-y\s+|--yes\s+)?[@\w./-]+@latest|"
-                r"(uvx|pipx\s+run)\s+[\w.-]+(?!==)\s|go\s+install\s+\S+@latest", I), "alle"),
+                r"(uvx|pipx\s+run)\s+[\w.-]+(?!==)\s|go\s+install\s+\S+@latest", I | re.A), "alle"),
     ("lieferkette", "info", "npx/uvx-Aufruf (Version prüfen)",
-     re.compile(r"\b(npx|bunx|uvx)\s+(-y\s+|--yes\s+)?(@?[\w.-]+(/[\w.-]+)?)"), "alle"),
+     re.compile(r"\b(npx|bunx|uvx)\s+(-y\s+|--yes\s+)?(@?[\w.-]+(/[\w.-]+)?)", re.A), "alle"),
     ("lieferkette", "mittel", "Installation direkt aus Git/URL",
      re.compile(r"pip3?\s+install\s+[^\n]*(git\+|https?://)|npm\s+i(nstall)?\s+[^\n]*(github:|git\+|https?://)", I), "alle"),
 
@@ -360,6 +362,52 @@ def sh(cmd: list[str], timeout: int = 60, env: dict | None = None) -> tuple[int,
         return 124, "", T("Zeitüberschreitung", "timeout")
 
 
+def _verbinde_ipv4_zuerst(adresse, timeout=socket._GLOBAL_DEFAULT_TIMEOUT, source_address=None, *_, **__):
+    """Wie socket.create_connection, aber IPv4-Adressen zuerst.
+
+    urllib probiert die Adressen sonst der Reihe nach, IPv6 vorne. In Netzen ohne
+    funktionierendes IPv6 wartet jeder Versuch die volle Frist ab — bei api.npmjs.org
+    (12 IPv6-Adressen) zwei Minuten statt einer Sekunde pro Abfrage.
+    """
+    host, port = adresse
+    infos = socket.getaddrinfo(host, port, 0, socket.SOCK_STREAM)
+    infos.sort(key=lambda i: i[0] != socket.AF_INET)
+    fehler: OSError | None = None
+    for familie, typ, proto, _name, ziel in infos:
+        sock = socket.socket(familie, typ, proto)
+        try:
+            if timeout is not socket._GLOBAL_DEFAULT_TIMEOUT:
+                sock.settimeout(timeout)
+            if source_address:
+                sock.bind(source_address)
+            sock.connect(ziel)
+            return sock
+        except OSError as e:
+            fehler = e
+            sock.close()
+    raise fehler or OSError(f"{host}: keine Adresse")
+
+
+class _HTTPSIPv4Zuerst(http.client.HTTPSConnection):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # HTTPConnection.__init__ setzt das als Instanz-Attribut — erst danach überschreiben.
+        self._create_connection = _verbinde_ipv4_zuerst
+
+
+class _HandlerIPv4Zuerst(urllib.request.HTTPSHandler):
+    def https_open(self, req):
+        return self.do_open(_HTTPSIPv4Zuerst, req, context=self._context)
+
+
+_OEFFNER = urllib.request.build_opener(_HandlerIPv4Zuerst())
+
+
+def url_oeffnen(ziel, timeout: float):
+    """Nur lesende HTTPS-Abfragen (GitHub, npm, PyPI) — IPv4 zuerst, siehe oben."""
+    return _OEFFNER.open(ziel, timeout=timeout)
+
+
 def parse_github(url: str) -> tuple[str, str, str | None, str | None]:
     """Gibt (owner, repo, branch, unterpfad) zurück."""
     url = url.strip().rstrip("/")
@@ -385,7 +433,7 @@ def gh_api(pfad: str) -> tuple[object | None, str | None]:
             req = urllib.request.Request(f"https://api.github.com/{pfad.lstrip('/')}",
                                          headers={"Accept": "application/vnd.github+json",
                                                   "User-Agent": "repo-pruefer"})
-            with urllib.request.urlopen(req, timeout=20) as r:
+            with url_oeffnen(req, timeout=20) as r:
                 return json.loads(r.read().decode()), None
         except Exception as e:  # noqa: BLE001
             return None, str(e)
@@ -536,6 +584,56 @@ def ist_binaer(pfad: Path) -> str | None:
     return None
 
 
+# --- npx/uvx: nur echte Befehle zählen ------------------------------------
+# In Übersetzungen und Fließtext steht „npx" als Wort im Satz („Node.js with npx is required",
+# „Node.js dengan npx diperlukan"). Das Wort danach ist dann kein Paket.
+NPX_REGELN = ("npx/uvx", "Unversionierter")
+UEBERSETZUNG_ORDNER = {"locales", "locale", "i18n", "l10n", "lang", "langs", "translations"}
+UEBERSETZUNG_EXT = {".po", ".pot", ".xliff", ".xlf", ".arb", ".strings", ".resx"}
+# Davor muss Zeilenanfang, ein Shell-/Code-Zeichen oder ein Startwort stehen.
+# Komma = CSV-Zelle. Kein „#": Kommentare sind oft Sätze („# npx without installing globally");
+# Befehle in Kommentaren erkennt die eindeutige Schreibweise (`@latest`, `-y`, `@org/paket`).
+BEFEHL_DAVOR = re.compile(r"(^|[`\"'(\[{;|&=:$>,]|\b(sudo|exec|run|then|do|env|time|xargs))\s*$", I)
+UVX_WORT = re.compile(r"(?:uvx|pipx\s+run)\s+([\w.-]+)", I | re.A)
+NPM_NAME = re.compile(r"^(@[a-z0-9][a-z0-9._~-]*/)?[a-z0-9][a-z0-9._~-]*$")
+PYPI_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$", re.A)
+# Übrig bleibende Satzwörter, z. B. „Hinweis: npx is required"
+KEIN_PAKET = {"is", "are", "was", "be", "to", "and", "or", "the", "a", "an", "with", "for", "in", "on",
+              "not", "can", "must", "will", "ist", "und", "oder", "muss", "kann", "est", "et", "es"}
+
+
+def ist_uebersetzung(rel: str) -> bool:
+    teile = rel.lower().split("/")
+    return Path(rel).suffix.lower() in UEBERSETZUNG_EXT or any(t in UEBERSETZUNG_ORDNER for t in teile[:-1])
+
+
+def befehls_treffer(muster: re.Pattern, zeile: str, mit_name: bool) -> re.Match | None:
+    """Erster Treffer, der wie ein echter Aufruf aussieht.
+
+    Echt ist ein Aufruf, wenn seine Schreibweise eindeutig ist (`-y`/`--yes`, `@org/paket`,
+    Versionsangabe, `@latest`) oder wenn davor ein Befehl beginnen kann (Zeilenanfang,
+    `&&`, Anführungszeichen, Backtick, `RUN` …). Bei mit_name muss zusätzlich das Wort
+    danach ein gültiger Paketname sein — das sortiert „npx is required" aus.
+    """
+    for m in muster.finditer(zeile):
+        if mit_name:
+            paket = m.group(3) or ""
+            name = re.sub(r"(?<=.)@[\w.^~-]*$", "", paket)
+            gueltig = PYPI_NAME if m.group(1) == "uvx" else NPM_NAME
+            if paket.lower() in KEIN_PAKET or not (paket.startswith("-") or gueltig.match(name)):
+                continue
+            mit_version = name != paket or zeile[m.end():m.end() + 1] == "@"
+            eindeutig = bool(m.group(2)) or (name.startswith("@") and "/" in name) or mit_version
+        else:
+            wort = UVX_WORT.match(m.group(0))
+            if wort and wort.group(1).lower() in KEIN_PAKET:   # „npx, uvx or an MCP client"
+                continue
+            eindeutig = "@latest" in m.group(0).lower()
+        if eindeutig or BEFEHL_DAVOR.search(zeile[:m.start()]):
+            return m
+    return None
+
+
 def bereich_von(pfad: Path, text_kopf: str) -> str:
     ext = pfad.suffix.lower()
     if ext in DOC_EXT:
@@ -613,6 +711,7 @@ def scan(wurzel: Path, unterpfad: str | None) -> dict:
 
         bereich = bereich_von(pfad, text[:2])
         ist_lock = name in LOCKFILES
+        uebersetzung = ist_uebersetzung(rel)
 
         # Strukturierte Dateien
         if name == "package.json":
@@ -642,7 +741,12 @@ def scan(wurzel: Path, unterpfad: str | None) -> dict:
             for kat, stufe, titel, muster, geltung in REGELN:
                 if geltung != "alle" and geltung != bereich:
                     continue
-                m = muster.search(zeile)
+                if titel.startswith(NPX_REGELN):
+                    if uebersetzung:
+                        continue
+                    m = befehls_treffer(muster, zeile, mit_name=titel.startswith("npx/uvx"))
+                else:
+                    m = muster.search(zeile)
                 if not m:
                     continue
                 if kat == SECRET_KATEGORIE:
@@ -812,7 +916,7 @@ def npm_check(pakete: list[str]) -> list[str]:
         m = m if isinstance(m, list) else [m]
         warn = T(" ⚠️ nur 1 Maintainer", " ⚠️ single maintainer") if len(m) == 1 else ""
         try:
-            with urllib.request.urlopen(f"https://api.npmjs.org/downloads/point/last-week/{p}", timeout=10) as r:
+            with url_oeffnen(f"https://api.npmjs.org/downloads/point/last-week/{p}", timeout=10) as r:
                 dl = json.loads(r.read().decode()).get("downloads")
             if isinstance(dl, int):
                 warn += T(f" · {dl:,} Downloads/Woche".replace(",", "."), f" · {dl:,} downloads/week")
@@ -829,7 +933,7 @@ def pypi_check(pakete: list[str]) -> list[str]:
     zeilen = []
     for p in pakete[:10]:
         try:
-            with urllib.request.urlopen(f"https://pypi.org/pypi/{p}/json", timeout=15) as r:
+            with url_oeffnen(f"https://pypi.org/pypi/{p}/json", timeout=15) as r:
                 d = json.loads(r.read().decode())
         except Exception:  # noqa: BLE001
             zeilen.append(f"- `{p}` (PyPI): " + T("nicht gefunden — Tippfehler-/Namensklau-Gefahr prüfen",
